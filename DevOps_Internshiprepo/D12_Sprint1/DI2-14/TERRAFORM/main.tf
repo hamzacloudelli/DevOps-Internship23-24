@@ -113,6 +113,39 @@ data "aws_ami" "amazon_linux_2" {
   }
 }
 
+#role or s3
+resource "aws_iam_role" "SSMRoleForEC2" {
+  name = "SSMRoleForEC2"
+
+  assume_role_policy = <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": {
+      "Service": "ec2.amazonaws.com"
+    },
+    "Action": "sts:AssumeRole"
+  }]
+}
+EOF
+}
+
+ resource "aws_iam_instance_profile" "SSMRoleForEC2" {
+  name = "SSMRoleForEC2"
+  role = aws_iam_role.SSMRoleForEC2.name
+}
+
+resource "aws_iam_role_policy_attachment" "role-policy-attachment" {
+  for_each = toset([
+    "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore",
+    "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+  ])
+
+  role        = aws_iam_role.SSMRoleForEC2.name
+  policy_arn  = each.value
+}
+
 
 # launch the ec2 instance and install website
 resource "aws_instance" "week2hamzatask" {
@@ -120,7 +153,10 @@ resource "aws_instance" "week2hamzatask" {
   instance_type          = "t2.micro"
   subnet_id              = aws_default_subnet.default_az1.id
   vpc_security_group_ids = [aws_security_group.hamzasg.id]
+  iam_instance_profile   = aws_iam_instance_profile.SSMRoleForEC2.name
+
   user_data = <<-EOF
+
     #!/bin/bash
     sudo yum update -y
     sudo yum install ec2-instance-connect
@@ -129,10 +165,27 @@ resource "aws_instance" "week2hamzatask" {
     sudo systemctl enable docker
     sudo docker pull nginx
     sudo docker run -d -p 80:80 nginx
-  EOF
+    
+    EOF
 
   tags = {
     Name = "hamza2"
   }
 }
 
+resource "aws_s3_bucket" "example" {
+  bucket = "week2buck23tfhf7fd32"
+  
+  tags = {
+    Name        = "My bucket"
+    Environment = "Dev"
+  }
+}
+
+resource "aws_s3_bucket_object" "object" {
+  bucket = aws_s3_bucket.example.id
+  key    = "index.html"
+  source = "C:/Users/HP/Downloads/index.html"
+  etag = filemd5("C:/Users/HP/Downloads/index.html")
+}
+ 
