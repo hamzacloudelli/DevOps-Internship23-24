@@ -1,0 +1,70 @@
+version: 0.2
+run-as: root
+
+phases:
+  pre_build:
+    commands:
+      - echo Logging in to Amazon ECR...
+      - aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 979490057625.dkr.ecr.us-east-1.amazonaws.com
+
+  build:
+    commands:
+      - echo Building the Docker image...
+      - docker build -t hamzaci .
+
+  post_build:
+    commands:
+      - docker tag hamzaci:latest 979490057625.dkr.ecr.us-east-1.amazonaws.com/hamzaci:latest
+      - docker push 979490057625.dkr.ecr.us-east-1.amazonaws.com/hamzaci:latest
+      - echo "Creating imagedefinitions.json file..."
+      - |
+        echo '[
+          {
+            "name": "hamzaci",
+            "imageUri": "979490057625.dkr.ecr.us-east-1.amazonaws.com/hamzaci:latest",
+            "containerPort": 80,
+            "hostPort": 80,
+            "essential": true
+          }
+        ]' > imagedefinitions.json
+      - |
+        echo '{
+          "family": "green",
+          "networkMode": "awsvpc",
+          "requiresCompatibilities": ["FARGATE"],
+          "memory": "512",
+          "cpu": "256",
+          "executionRoleArn": "'$executionrole'",
+          "containerDefinitions": [
+            {
+              "name": "frontend",
+              "image": "979490057625.dkr.ecr.us-east-1.amazonaws.com/hamzaci:latest",
+              "portMappings": [
+                {
+                  "containerPort": 80,
+                  "hostPort": 80
+                }
+              ],
+              "memory" : 500,
+              "cpu" : 250
+            }
+          ]
+        }' > taskdef.json
+      - export TASK_DEF_ARN=$(aws ecs register-task-definition --cli-input-json file://taskdef.json --query 'taskDefinition.taskDefinitionArn' --output text)
+      - echo "'$TASK_DEF_ARN'"
+      - |
+        echo 'version: 0.0
+        Resources:
+          - TargetService:
+              Type: AWS::ECS::Service
+              Properties:
+                TaskDefinition: "'$TASK_DEF_ARN'"
+                LoadBalancerInfo:
+                  ContainerName: "hamzaci"
+                  ContainerPort: 80' > appspec.yaml
+
+artifacts:
+  files:
+    - imagedefinitions.json
+    - appspec.yaml
+    - taskdef.json
