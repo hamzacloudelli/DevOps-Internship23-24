@@ -38,6 +38,40 @@ resource "aws_eip_association" "hamza_eip_assoc" {
 }
 
 
+# create security group for the ec2 instance
+resource "aws_security_group" "hamzasg" {
+  name        = "hamzaciec2 security group"
+  description = "allow access on ports 80 and 22"
+  vpc_id      = aws_vpc.example_vpc.id
+
+  ingress {
+    description      = "http access"
+    from_port        = 80
+    to_port          = 80
+    protocol         = "tcp"
+    cidr_blocks      = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description      = "ssh access"
+    from_port        = 22
+    to_port          = 22
+    protocol         = "tcp"
+    cidr_blocks      = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port        = 0
+    to_port          = 0
+    protocol         = "-1"
+    cidr_blocks      = ["0.0.0.0/0"]
+  }
+
+  tags   = {
+    Name = "hamzasg"
+  }
+}
+
 
 # use data source to get a registered amazon linux 2 ami
 data "aws_ami" "amazon_linux_2" {
@@ -96,6 +130,7 @@ resource "aws_instance" "example" {
   ami = data.aws_ami.amazon_linux_2.id
   instance_type = "t2.micro"
   subnet_id = aws_subnet.example_subnet.id
+  vpc_security_group_ids = [aws_security_group.hamzasg.id]
   tags = {
     Name = "hamzacicloudwatch"
   }
@@ -109,7 +144,7 @@ resource "aws_cloudwatch_metric_alarm" "cpu_utilization_alarm" {
      namespace                 = "AWS/EC2"
      period                    = "120" #seconds
      statistic                 = "Average"
-     threshold                 = "10"
+     threshold                 = "3"
      alarm_description         = "This metric monitors ec2 cpu utilization"
      insufficient_data_actions = []
 dimensions = {
@@ -117,3 +152,4 @@ dimensions = {
      }
      alarm_actions = ["arn:aws:automate:us-east-1:ec2:stop"]
 }
+
