@@ -1,17 +1,3 @@
-terraform {
-    required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 4.0"
-    }
-  }
-}
-
-provider "aws" {
-    region = "us-east-1"
-}
-
-
 resource "aws_vpc" "custom" {
   
   # IP Range for the VPC
@@ -205,9 +191,6 @@ resource "aws_security_group" "private_instance_sg" {
     cidr_blocks = ["192.168.1.0/24"]
   }
   
-  ///////////////updated //////////////////
-  ////////////////code////////////////
-
   egress {
     from_port   = 0
     to_port     = 0
@@ -215,82 +198,3 @@ resource "aws_security_group" "private_instance_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 }
-
-data "aws_ami" "amazon_linux" {
-  most_recent = true
-  owners      = ["amazon"] 
-
-  filter {
-    name   = "name"
-    values = ["amzn2-ami-hvm-*-x86_64-gp2"]  # Replace with desired AMI name pattern
-  }
-
-  filter {
-    name   = "virtualization-type"
-    values = ["hvm"]
-  }
-}
- 
-
-
-resource "aws_instance" "public_instance" {
-  depends_on = [
-    aws_security_group.public_instance_sg
-  ]
-  ami           = data.aws_ami.amazon_linux.id
-  instance_type = "t2.micro"
-  key_name      = "hamzaecsec2"
-  subnet_id     = aws_subnet.subnet1.id
-  security_groups = [aws_security_group.public_instance_sg.id]
-
-    # Add provisioners to copy the pem key and set permissions
-  provisioner "file" {
-    source      = "./hamzaecsec2.pem"  # Corrected source path
-    destination = "/home/ec2-user/hamzaecsec2.pem"  # Adjusted destination path on the remote instance
-  }
-
-  provisioner "remote-exec" {
-    inline = [
-      "chmod 400 /home/ec2-user/hamzaecsec2.pem"  # Corrected path on the remote instance
-    ]
-  }
-
-  connection {
-    type        = "ssh"
-    user        = "ec2-user"  # Replace with the appropriate user
-    private_key = file("./hamzaecsec2.pem")  # Corrected path on your local machine
-    host        = aws_instance.public_instance.public_ip
-  }
- 
-  tags = {
-    Name = "hamzaciPublicInstance"
-  }
-}
-
-resource "aws_instance" "private_instance" {
-   
-    depends_on = [
-    aws_security_group.private_instance_sg
-  ]
-  ami           = data.aws_ami.amazon_linux.id
-  instance_type = "t2.micro"
-  key_name      = "hamzaecsec2"
-  subnet_id     = aws_subnet.subnet2.id
-  security_groups = [aws_security_group.private_instance_sg.id]
-
-  tags = {
-    Name = "hamzaciPrivateInstance"
-  }
-}
-
-# Create an Elastic IP (EIP)
-resource "aws_eip" "my_eip" {
-  vpc = true  # Assign to a VPC
-}
-
-# Attach the EIP to the instance
-resource "aws_eip_association" "eip_assoc" {
-  instance_id   = aws_instance.public_instance.id  # Replace with your instance ID
-  allocation_id = aws_eip.my_eip.id
-}
-
